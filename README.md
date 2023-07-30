@@ -1,4 +1,4 @@
-# NordVPN-task
+# task
 Instructions on setting up this repository on your machine
 1. Download _Docker_ and _Docker-Compose.yaml_ made specifically for airflow
 2. My airflow DAG requires external libraries that are not installed together when building a docker image, therefore a custom image needs to be built:
