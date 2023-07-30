@@ -4,7 +4,7 @@ from airflow.operators.python import PythonOperator
 import pandas as pd
 from pytrends.request import TrendReq 
 from google.cloud import bigquery
-from datetime import datetime
+from datetime import datetime, timedelta
 
 search_terms = ["vpn", "hack", "cyber", "security", "wifi"]
 
@@ -25,7 +25,7 @@ def select_trends_data(ti, search_terms):
     first_day, last_day = get_previous_week_dates() 
 
     pytrend = TrendReq(retries = 20)#, requests_args=request_args)
-    pytrend.build_payload(kw_list = search_terms, timeframe = get_previous_week_dates())
+    pytrend.build_payload(kw_list = search_terms, timeframe = f"{first_day} {last_day}")
     df = pytrend.interest_by_region()
     json_str = df.to_json()
 
@@ -137,13 +137,13 @@ with DAG("my_dag", start_date = datetime(2021,1,1),
         data_from_google_trends = PythonOperator(
             task_id = 'data_from_google_trends',
             python_callable = select_trends_data,
-            op_args = [ti, search_terms]
+            op_kwargs = {'search_terms':search_terms}
         )
 
         transform_data = PythonOperator(
             task_id = 'transform_data',
             python_callable = transform_data,
-            op_args = [ti, search_terms]
+            op_kwargs = {'search_terms':search_terms}
 
         )
 
