@@ -136,23 +136,25 @@ with DAG("my_dag", start_date = datetime(2021,1,1),
 
         data_from_google_trends = PythonOperator(
             task_id = 'data_from_google_trends',
-            python_callable = select_trends_data
+            python_callable = select_trends_data,
+            op_args = [ti, search_terms]
         )
 
         transform_data = PythonOperator(
             task_id = 'transform_data',
-            python_callable = select_trends_data
+            python_callable = transform_data,
+            op_args = [ti, search_terms]
 
         )
 
         remove_countries_without_interest = PythonOperator(
             task_id = 'remove_countries_without_interest',
-            python_callable = select_trends_data
+            python_callable = filtering_countries_with_same_interests
         )
 
         calculate_rankings = PythonOperator(
             task_id = 'calculate_rankings',
-            python_callable = select_trends_data
+            python_callable = rank_search_terms
         )
 
         data_from_google_trends >> transform_data >> remove_countries_without_interest >> calculate_rankings
