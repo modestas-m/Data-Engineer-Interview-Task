@@ -186,9 +186,3 @@ with DAG("my_dag", start_date = datetime(2021,1,1),
                          'table_id':table_id}
         )
         data_from_google_trends >> transform_data >> remove_countries_without_interest >> calculate_rankings >> write_to_bigquery_table
-        # ,
-
-        # task_5 = PythonOperator(
-        #     task_id = 'write_to_bigquery_table',
-        #     python_callable = select_trends_data
-        # ),
