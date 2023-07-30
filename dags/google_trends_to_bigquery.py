@@ -15,6 +15,7 @@ project_id = "homework-data2020"
 dataset_id = "data_engineer"
 table_id = "MM_google_search_results"
 
+"""function for returning first and last dates of the previous week"""
 def get_previous_week_dates():
     today = datetime.today()
     start_of_week = today - timedelta(days=today.weekday() + 7)
@@ -26,6 +27,8 @@ def get_previous_week_dates():
     # return f"{first_day} {last_day}"
     return first_day, last_day
 
+
+"""function for connecting to google trends with code and getting interests by country for the previous week"""
 def select_trends_data(ti, search_terms):
     #get the first and last date of the previous week
     first_day, last_day = get_previous_week_dates() 
@@ -38,11 +41,12 @@ def select_trends_data(ti, search_terms):
     # Push the JSON string to XCom
     ti.xcom_push(key='df_pytrends', value=json_str)
 
+"""unpivoting the data on the columns, adding dates and renaming columns"""
 def transform_data(ti, search_terms):
     
     json_str = ti.xcom_pull(key='df_pytrends')
     df = pd.read_json(json_str)
-    print(df.head(10))
+
     df.reset_index(inplace=True)
     # Melt the DataFrame to transform columns "vpn", "hack", "cyber", "security", "wifi" into rows
     print(df.head(10))
@@ -62,11 +66,15 @@ def transform_data(ti, search_terms):
 
     ti.xcom_push(key='df_transformed', value=df_transformed)
 
+"""function for filtering out countries with 0 interest in all search terms"""
 def filtering_countries_with_same_interests(ti):
 
     json_str = ti.xcom_pull(key='df_transformed')
     df = pd.read_json(json_str)
-    grouped = df.groupby(['country', 'interest'])['search_term'].nunique().reset_index()
+
+    #grouping dataframe on country and interest
+    grouped = df.groupby(['country', 'interest'])['search_term'].nunique().reset_index() 
+
     # Filtering out the countries where all search_terms have 0 interest
     filtered_countries = grouped[grouped['search_term'] < 5]
     
@@ -90,7 +98,6 @@ def rank_search_terms(ti):
     print(0 if test_row['search_term'] == 'vpn' else 1)
     # Apply special case for search_term 'vpn': give it a low numeric value for sorting
     df['sort_priority'] = df.apply(lambda x: 0 if x['search_term'] == 'vpn' else 1, axis=1)
-    # df = df.assign(sort_priority=lambda x: 0 if x['search_term'] == 'vpn' else 1)
 
     # Sort dataframe based on 'country', 'week_start', 'value', 'sort_priority', and 'search_term'
     df = df.sort_values(['country', 'week_start', 'interest', 'sort_priority', 'search_term'], ascending=[True, True, False, False, True])
@@ -105,6 +112,7 @@ def rank_search_terms(ti):
     ti.xcom_push(key='df_ranking', value=df)
 
 
+"""function for writing the final dataframe to bigquery table"""
 def write_to_bigquery(ti, project_id, dataset_id, table_id):
     
     json_str = ti.xcom_pull(key='df_ranking')
@@ -152,7 +160,7 @@ def write_to_bigquery(ti, project_id, dataset_id, table_id):
 
 
 with DAG("my_dag", start_date = datetime(2021,1,1),
-        schedule_interval="@daily", catchup=False
+        schedule_interval="@weekly", catchup=False
 ) as dag:
 
         data_from_google_trends = PythonOperator(
