@@ -1,13 +1,19 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.models import Variable
+from airflow.providers.google.common.hooks.base_google import GoogleBaseHook
+
 
 import pandas as pd
 from pytrends.request import TrendReq 
 from google.cloud import bigquery
 from datetime import datetime, timedelta
+import os 
 
 search_terms = ["vpn", "hack", "cyber", "security", "wifi"]
-
+project_id = "homework-data2020"
+dataset_id = "data_engineer"
+table_id = "MM_google_search_results"
 
 def get_previous_week_dates():
     today = datetime.today()
@@ -77,8 +83,14 @@ def rank_search_terms(ti):
 
     json_str = ti.xcom_pull(key='df_countries_filtered')
     df = pd.read_json(json_str)
+    print(df.columns)
+    print(df.head(10))
+    test_row = df.iloc[0]
+    print(test_row['search_term'])
+    print(0 if test_row['search_term'] == 'vpn' else 1)
     # Apply special case for search_term 'vpn': give it a low numeric value for sorting
     df['sort_priority'] = df.apply(lambda x: 0 if x['search_term'] == 'vpn' else 1, axis=1)
+    # df = df.assign(sort_priority=lambda x: 0 if x['search_term'] == 'vpn' else 1)
 
     # Sort dataframe based on 'country', 'week_start', 'value', 'sort_priority', and 'search_term'
     df = df.sort_values(['country', 'week_start', 'interest', 'sort_priority', 'search_term'], ascending=[True, True, False, False, True])
@@ -97,8 +109,13 @@ def write_to_bigquery(ti, project_id, dataset_id, table_id):
     
     json_str = ti.xcom_pull(key='df_ranking')
     df = pd.read_json(json_str)
-    
-    client = bigquery.Client()
+    conn_id = 'google_cloud_connection'
+
+    # Get the credentials from the Airflow connection
+    hook = GoogleBaseHook(gcp_conn_id=conn_id)
+    credentials = hook.get_credentials() 
+
+    client = bigquery.Client(credentials=credentials)
 
     dataset = client.dataset(dataset_id)
     table = dataset.table(table_id)
@@ -160,8 +177,15 @@ with DAG("my_dag", start_date = datetime(2021,1,1),
             task_id = 'calculate_rankings',
             python_callable = rank_search_terms
         )
-
-        data_from_google_trends >> transform_data >> remove_countries_without_interest >> calculate_rankings
+        
+        write_to_bigquery_table = PythonOperator(
+            task_id = 'write_to_bigquery_table',
+            python_callable = write_to_bigquery,
+            op_kwargs = {'project_id':project_id,
+                         'dataset_id':dataset_id,
+                         'table_id':table_id}
+        )
+        data_from_google_trends >> transform_data >> remove_countries_without_interest >> calculate_rankings >> write_to_bigquery_table
         # ,
 
         # task_5 = PythonOperator(
