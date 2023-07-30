@@ -36,11 +36,11 @@ def transform_data(ti, search_terms):
     
     json_str = ti.xcom_pull(key='df_pytrends')
     df = pd.read_json(json_str)
-
+    print(df.head(10))
     df.reset_index(inplace=True)
     # Melt the DataFrame to transform columns "vpn", "hack", "cyber", "security", "wifi" into rows
-
-    df_transformed = df.melt(id_vars=['geoName'], var_name='search_term', value_name='interest')
+    print(df.head(10))
+    df_transformed = df.melt(id_vars=['index'], var_name='search_term', value_name='interest')
     df_transformed = df_transformed[df_transformed['search_term'].isin(search_terms)]
 
     # # Add week_start and week_end columns
@@ -48,7 +48,7 @@ def transform_data(ti, search_terms):
     # df_transformed['week_end'] = '2023-07-23'
     df_transformed['week_start'], df_transformed['week_end'] = get_previous_week_dates()
     # Rename the 'geoName' column to 'country'
-    df_transformed.rename(columns={'geoName': 'country'}, inplace=True)
+    df_transformed.rename(columns={'index': 'country'}, inplace=True)
 
     # Reorder the columns as required
     df_transformed = df_transformed[['country', 'week_start', 'week_end', 'search_term', 'interest']]
@@ -58,8 +58,9 @@ def transform_data(ti, search_terms):
 
 def filtering_countries_with_same_interests(ti):
 
-    ti.xcom_pull(key='df_transformed')
-    grouped = df_sorted.groupby(['country', 'interest'])['search_term'].nunique().reset_index()
+    json_str = ti.xcom_pull(key='df_transformed')
+    df = pd.read_json(json_str)
+    grouped = df.groupby(['country', 'interest'])['search_term'].nunique().reset_index()
     # Filtering out the countries where all search_terms have 0 interest
     filtered_countries = grouped[grouped['search_term'] < 5]
     
@@ -67,14 +68,15 @@ def filtering_countries_with_same_interests(ti):
     countries_with_same_value = filtered_countries['country'].tolist()
     
     # Filtering the dataframe based on the countries in the list
-    countries_filtered = df_sorted[df_sorted['country'].isin(countries_with_same_value)]
+    countries_filtered = df[df['country'].isin(countries_with_same_value)]
     countries_filtered = countries_filtered.to_json()
     ti.xcom_push(key='df_countries_filtered', value=countries_filtered)
 
 """main function for calculating ranking"""
 def rank_search_terms(ti):
 
-    df = ti.xcom_pull(key='df_countries_filtered')
+    json_str = ti.xcom_pull(key='df_countries_filtered')
+    df = pd.read_json(json_str)
     # Apply special case for search_term 'vpn': give it a low numeric value for sorting
     df['sort_priority'] = df.apply(lambda x: 0 if x['search_term'] == 'vpn' else 1, axis=1)
 
@@ -93,7 +95,9 @@ def rank_search_terms(ti):
 
 def write_to_bigquery(ti, project_id, dataset_id, table_id):
     
-    ti.xcom_pull(key='df_ranking')
+    json_str = ti.xcom_pull(key='df_ranking')
+    df = pd.read_json(json_str)
+    
     client = bigquery.Client()
 
     dataset = client.dataset(dataset_id)
