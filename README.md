@@ -4,6 +4,7 @@ Instructions on setting up this repository on your machine
 2. My airflow DAG requires external libraries that are not installed together when building a docker image, therefore a custom image needs to be built:
    
    a. Create a _Dockerfile_
+   
    b. Populate the file with this code
    
      ```
