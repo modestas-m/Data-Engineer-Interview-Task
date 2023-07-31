@@ -15,26 +15,15 @@ project_id = "homework-data2020"
 dataset_id = "data_engineer"
 table_id = "MM_google_search_results"
 
-"""function for returning first and last dates of the previous week"""
-def get_previous_week_dates():
-    today = datetime.today()
-    start_of_week = today - timedelta(days=today.weekday() + 7)
-    previous_week_dates = [(start_of_week + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
-    
-    first_day = previous_week_dates[0]
-    last_day = previous_week_dates[-1]
-    
-    # return f"{first_day} {last_day}"
-    return first_day, last_day
-
+#provide the dates for historical load
+week_start = ""
+week_end = ""
 
 """function for connecting to google trends with code and getting interests by country for the previous week"""
-def select_trends_data(ti, search_terms):
-    #get the first and last date of the previous week
-    first_day, last_day = get_previous_week_dates() 
+def select_trends_data(ti, search_terms, week_start, week_end):
 
     pytrend = TrendReq(retries = 20)#, requests_args=request_args)
-    pytrend.build_payload(kw_list = search_terms, timeframe = f"{first_day} {last_day}")
+    pytrend.build_payload(kw_list = search_terms, timeframe = f"{week_start} {week_end}")
     df = pytrend.interest_by_region()
     json_str = df.to_json()
 
@@ -42,7 +31,7 @@ def select_trends_data(ti, search_terms):
     ti.xcom_push(key='df_pytrends', value=json_str)
 
 """unpivoting the data on the columns, adding dates and renaming columns"""
-def transform_data(ti, search_terms):
+def transform_data(ti, search_terms, week_start, week_end):
     
     json_str = ti.xcom_pull(key='df_pytrends')
     df = pd.read_json(json_str)
@@ -56,7 +45,7 @@ def transform_data(ti, search_terms):
     # # Add week_start and week_end columns
     # df_transformed['week_start'] = '2023-07-17'
     # df_transformed['week_end'] = '2023-07-23'
-    df_transformed['week_start'], df_transformed['week_end'] = get_previous_week_dates()
+    df_transformed['week_start'], df_transformed['week_end'] = week_start, week_end
     # Rename the 'geoName' column to 'country'
     df_transformed.rename(columns={'index': 'country'}, inplace=True)
 
@@ -159,20 +148,26 @@ def write_to_bigquery(ti, project_id, dataset_id, table_id):
     print("Data appended to table")
 
 
-with DAG("google_trends_to_bigquery", start_date = datetime(2021,1,1),
+with DAG("historical_google_trends_load", start_date = datetime(2021,1,1),
         schedule_interval="@weekly", catchup=False
 ) as dag:
 
         data_from_google_trends = PythonOperator(
             task_id = 'data_from_google_trends',
             python_callable = select_trends_data,
-            op_kwargs = {'search_terms':search_terms}
+            op_kwargs = {'search_terms':search_terms,
+                        'week_start':week_start,
+                        'week_end':week_end
+            }
         )
 
         transform_data = PythonOperator(
             task_id = 'transform_data',
             python_callable = transform_data,
-            op_kwargs = {'search_terms':search_terms}
+            op_kwargs = {'search_terms':search_terms,
+                        'week_start':week_start,
+                        'week_end':week_end
+            }
 
         )
 
